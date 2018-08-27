@@ -2,6 +2,8 @@ package main
 
 import (
 	"bufio"
+	"bytes"
+	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -31,16 +33,15 @@ func proxy(conn net.Conn) {
 			}
 		}
 		req.Header.Del("Proxy-Connection")
-		req.RequestURI = ""
-		client := &http.Client{}
 
-		resp, respErr := client.Do(req)
-		if respErr != nil {
-			return
+		var buf bytes.Buffer
+		buf.WriteString(fmt.Sprintf("%s %s %s\r\n", req.Method, req.URL.Path, req.Proto))
+		buf.WriteString(fmt.Sprintf("Host: %s\r\n", req.Host))
+		for head := range req.Header {
+			buf.WriteString(fmt.Sprintf("%s: %s\r\n", head, req.Header[head]))
 		}
-		defer resp.Body.Close()
-
-		resp.Write(conn)
+		var str = string(buf.Bytes())
+		str += ""
 	}
 
 }
