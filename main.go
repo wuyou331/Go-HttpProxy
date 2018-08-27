@@ -2,12 +2,13 @@ package main
 
 import (
 	"bufio"
-	"bytes"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 )
 
 func proxy(conn net.Conn) {
@@ -15,7 +16,9 @@ func proxy(conn net.Conn) {
 		return
 	}
 	defer conn.Close()
-	req, err := http.ReadRequest(bufio.NewReader(conn))
+
+	connBuf := bufio.NewReader(conn)
+	req, err := http.ReadRequest(connBuf)
 	if err != nil {
 		return
 	}
@@ -34,14 +37,37 @@ func proxy(conn net.Conn) {
 		}
 		req.Header.Del("Proxy-Connection")
 
-		var buf bytes.Buffer
-		buf.WriteString(fmt.Sprintf("%s %s %s\r\n", req.Method, req.URL.Path, req.Proto))
-		buf.WriteString(fmt.Sprintf("Host: %s\r\n", req.Host))
+		client, _ := net.Dial("tcp", req.Host)
+		defer func() {
+			if err := recover(); err != nil {
+				fmt.Println(err)
+
+			}
+
+			defer func() {
+				if err := recover(); err != nil {
+					fmt.Println(err)
+				}
+			}()
+			client.Close()
+		}()
+		reqBuf := bufio.NewWriter(client)
+		//写入头部
+		reqBuf.WriteString(fmt.Sprintf("%s %s %s\r\n", req.Method, req.URL.Path, req.Proto))
+		reqBuf.WriteString(fmt.Sprintf("Host: %s\r\n", req.Host))
 		for head := range req.Header {
-			buf.WriteString(fmt.Sprintf("%s: %s\r\n", head, req.Header[head]))
+			reqBuf.WriteString(fmt.Sprintf("%s: %s\r\n", head, strings.Join(req.Header[head], ",")))
 		}
-		var str = string(buf.Bytes())
-		str += ""
+		reqBuf.WriteString("\r\n")
+		//写入body
+		len := connBuf.Buffered()
+		body, _ := connBuf.Peek(len)
+		reqBuf.Write(body)
+		err = reqBuf.Flush()
+
+		bs, _ := ioutil.ReadAll(client)
+		conn.Write(bs)
+
 	}
 
 }
@@ -57,6 +83,6 @@ func main() {
 		if err != nil {
 			log.Panic(err)
 		}
-		proxy(client)
+		go proxy(client)
 	}
 }
