@@ -77,11 +77,11 @@ func proxy(conn net.Conn) {
 		go io.Copy(socket, conn)
 		io.Copy(conn, socket)
 	} else {
+		//普通请求
 		if strings.IndexByte(host.Host, byte(':')) == -1 {
 			host.Host += ":80"
 		}
 
-		//普通请求
 		//修改请求头，不保持tcp连接
 		delete(header, "Proxy-Connection")
 		delete(header, "Connection")
@@ -103,26 +103,21 @@ func proxy(conn net.Conn) {
 			}
 		}()
 
-		reqWriter := bufio.NewWriter(httpClient)
 		//写入头部
-		reqWriter.WriteString(fmt.Sprintf("%s %s %s%s", method, host.Path, proto, NewLine))
+		httpClient.Write([]byte(fmt.Sprintf("%s %s %s%s", method, host.Path, proto, NewLine)))
 		for head := range header {
-			reqWriter.WriteString(fmt.Sprintf("%s: %s%s", head, header[head], NewLine))
+			httpClient.Write([]byte(fmt.Sprintf("%s: %s%s", head, header[head], NewLine)))
 		}
-		reqWriter.WriteString(NewLine)
+		httpClient.Write([]byte(NewLine))
 		if cl, ok := header["Content-Length"]; ok {
 			//获取body长度，写入	body
 			if len, _ := strconv.Atoi(cl); len > 0 {
 				buf, _ := connReader.Peek(len)
-				reqWriter.Write(buf[0:len])
+				httpClient.Write(buf[0:len])
 			}
 		}
 
-		//有时候数据写完，socket即断开连接
-		if httpClient != nil {
-			reqWriter.Flush()
-			io.Copy(conn, httpClient)
-		}
+		io.Copy(conn, httpClient)
 	}
 
 }
