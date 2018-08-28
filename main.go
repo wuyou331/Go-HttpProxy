@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/url"
@@ -32,19 +33,19 @@ func proxy(conn net.Conn) {
 			return
 		}
 	} else {
-
 		args := strings.Split(line, " ")
 		if len(args) != 3 {
 			//非标准请求头
-			fmt.Printf("首行非标准请求头:%s", line)
+			fmt.Printf("首行非标准请求头:%s%s", line, NewLine)
 			return
 		}
 		method, proto = args[0], args[2]
 		host, err = url.Parse(args[1])
 		if err != nil {
-			fmt.Printf("Host非标准URL:%s", args[1])
+			fmt.Printf("Host非标准URL:%s%s", args[1], NewLine)
 			return
 		}
+
 	}
 	//组装header
 	for {
@@ -58,25 +59,39 @@ func proxy(conn net.Conn) {
 		spitIndex := strings.IndexAny(line, ":")
 		if spitIndex == -1 {
 			//非标准请求头
-			fmt.Printf("非标准请求头:%s", line)
+			fmt.Printf("非标准请求头:%s%s", line, NewLine)
 			return
 		}
 		header[line[0:spitIndex]] = strings.Trim(line[spitIndex+1:], " ")
 	}
 
-	//发起请求
 	if method == "CONNECT" {
-
+		//隧道请求
+		host := fmt.Sprintf("%s:%s", host.Scheme, host.Opaque)
+		socket, err := net.Dial("tcp", host)
+		if err != nil {
+			fmt.Printf("服务器无法连接:%s%s", host, NewLine)
+			return
+		}
+		conn.Write([]byte(fmt.Sprintf("HTTP/1.1 200 Connection Established%s%s", NewLine, NewLine)))
+		go io.Copy(socket, conn)
+		io.Copy(conn, socket)
 	} else {
+		if strings.IndexByte(host.Host, byte(':')) == -1 {
+			host.Host += ":80"
+		}
+
+		//普通请求
 		//修改请求头，不保持tcp连接
 		delete(header, "Proxy-Connection")
 		delete(header, "Connection")
 		header["Connection"] = "close"
 
 		//发起http请求
+
 		httpClient, err := net.Dial("tcp", host.Host)
 		if err != nil {
-			fmt.Printf("服务器无法连接:%s", host.Host)
+			fmt.Printf("服务器无法连接:%s%s", host.Host, NewLine)
 			return
 		}
 		defer func() {
@@ -106,24 +121,18 @@ func proxy(conn net.Conn) {
 		//有时候数据写完，socket即断开连接
 		if httpClient != nil {
 			reqWriter.Flush()
-			rspReader := bufio.NewReader(httpClient)
-			var buf = make([]byte, 1024*100)
-			for {
-				len, err := rspReader.Read(buf)
-				if len == 0 || err != nil {
-					break
-				}
-				conn.Write(buf[0:len])
-			}
+			io.Copy(conn, httpClient)
 		}
-
 	}
 
 }
 
 func readLine(r *bufio.Reader) (string, error) {
 	line, err := r.ReadString('\n')
-	return line[:len(line)-2], err
+	if len(line) >= 2 {
+		line = line[:len(line)-2]
+	}
+	return line, err
 }
 func main() {
 	l, err := net.Listen("tcp", ":1081")
