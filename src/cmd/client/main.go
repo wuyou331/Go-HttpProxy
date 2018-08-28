@@ -111,9 +111,9 @@ func proxy(conn net.Conn) {
 		httpClient.Write([]byte(NewLine))
 		if cl, ok := header["Content-Length"]; ok {
 			//获取body长度，写入	body
-			if len, _ := strconv.Atoi(cl); len > 0 {
-				buf, _ := connReader.Peek(len)
-				httpClient.Write(buf[0:len])
+			if length, _ := strconv.Atoi(cl); length > 0 {
+				buf, _ := connReader.Peek(length)
+				httpClient.Write(buf[0:length])
 			}
 		}
 
