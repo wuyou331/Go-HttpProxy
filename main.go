@@ -3,12 +3,15 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
 	"strconv"
 	"strings"
+)
+
+const (
+	NewLine = "\r\n"
 )
 
 func proxy(conn net.Conn) {
@@ -26,47 +29,46 @@ func proxy(conn net.Conn) {
 	if req.Method == "CONNECT" {
 
 	} else {
-		if req.Method == "POST" {
-			cl := req.Header.Get("Content-Length")
-			req.Header.Add("Connection", "keep-alive")
-			length, _ := strconv.Atoi(cl)
-
-			if length == 0 {
-				log.Panic("内容长度不一致")
-			}
-		}
 		req.Header.Del("Proxy-Connection")
+		req.Header.Add("Connection", "close")
 
+		//发起http请求
 		client, _ := net.Dial("tcp", req.Host)
 		defer func() {
-			if err := recover(); err != nil {
-				fmt.Println(err)
+			if client != nil {
+				client.Close()
+			}
+		}()
 
+		reqWriter := bufio.NewWriter(client)
+		//写入头部
+		reqWriter.WriteString(fmt.Sprintf("%s %s %s%s", req.Method, req.URL.Path, req.Proto, NewLine))
+		reqWriter.WriteString(fmt.Sprintf("Host: %s%s", req.Host, NewLine))
+		for head := range req.Header {
+			reqWriter.WriteString(fmt.Sprintf("%s: %s%s", head, strings.Join(req.Header[head], ","), NewLine))
+		}
+		reqWriter.WriteString(NewLine)
+		cl := req.Header.Get("Content-Length")
+		length, _ := strconv.Atoi(cl)
+		if length > 0 {
+			//写入body
+			body, _ := connBuf.Peek(length)
+			reqWriter.Write(body)
+		}
+
+		if client != nil {
+			reqWriter.Flush()
+			rspReader := bufio.NewReader(client)
+			var buf = make([]byte, 1024*10)
+			for {
+				length, err = rspReader.Read(buf)
+				if length == 0 || err != nil {
+					break
+				}
+				conn.Write(buf[0:length])
 			}
 
-			defer func() {
-				if err := recover(); err != nil {
-					fmt.Println(err)
-				}
-			}()
-			client.Close()
-		}()
-		reqBuf := bufio.NewWriter(client)
-		//写入头部
-		reqBuf.WriteString(fmt.Sprintf("%s %s %s\r\n", req.Method, req.URL.Path, req.Proto))
-		reqBuf.WriteString(fmt.Sprintf("Host: %s\r\n", req.Host))
-		for head := range req.Header {
-			reqBuf.WriteString(fmt.Sprintf("%s: %s\r\n", head, strings.Join(req.Header[head], ",")))
 		}
-		reqBuf.WriteString("\r\n")
-		//写入body
-		len := connBuf.Buffered()
-		body, _ := connBuf.Peek(len)
-		reqBuf.Write(body)
-		err = reqBuf.Flush()
-
-		bs, _ := ioutil.ReadAll(client)
-		conn.Write(bs)
 
 	}
 
