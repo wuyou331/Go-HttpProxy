@@ -23,8 +23,8 @@ func proxy(conn net.Conn) {
 	var header = make(map[string]string)
 	var method, proto string
 	var host *url.URL
-
 	var connReader = bufio.NewReader(conn)
+
 	//读取请求头第一行
 	if line, err := readLine(connReader); err != nil {
 		if err != nil {
@@ -99,7 +99,6 @@ func proxy(conn net.Conn) {
 			//获取body长度，写入	body
 			if len, _ := strconv.Atoi(cl); len > 0 {
 				buf, _ := connReader.Peek(len)
-
 				reqWriter.Write(buf[0:len])
 			}
 		}
@@ -124,11 +123,6 @@ func proxy(conn net.Conn) {
 
 func readLine(r *bufio.Reader) (string, error) {
 	line, err := r.ReadString('\n')
-	defer func() {
-		if err := recover(); err != nil {
-			fmt.Print(err)
-		}
-	}()
 	return line[:len(line)-2], err
 }
 func main() {
