@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"req"
+	"request"
 )
 
 func proxy(conn net.Conn) {
