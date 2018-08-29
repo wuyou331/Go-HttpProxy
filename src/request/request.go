@@ -75,6 +75,10 @@ func (request *Request) Connect(conn net.Conn) {
 
 func (request *Request) Proxy(conn net.Conn, reader *bufio.Reader) {
 	//普通请求
+	if len(request.URL.Host) == 0 {
+		request.URL.Host = request.URL.Scheme
+	}
+
 	if strings.IndexByte(request.URL.Host, byte(':')) == -1 {
 		request.URL.Host += ":80"
 	}

@@ -21,7 +21,7 @@ func proxy(conn net.Conn) {
 		return
 	}
 
-	if request.Method == "Connect" {
+	if request.Method == "CONNECT" {
 		request.Connect(conn)
 	} else {
 		request.Proxy(conn, connReader)
