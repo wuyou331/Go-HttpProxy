@@ -20,14 +20,20 @@ type Request struct {
 	Method string
 	Proto  string
 	Header map[string]string
+
+	conn   net.Conn
+	reader *bufio.Reader
 }
 
 //CreateRequest 打包Request
-func CreateRequest(reader *bufio.Reader) (*Request, error) {
+func CreateRequest(conn net.Conn) (*Request, error) {
 
 	var request = Request{}
+	request.conn = conn
+	request.reader = bufio.NewReader(conn)
+
 	//读取请求头第一行
-	if line, err := readLine(reader); err != nil {
+	if line, err := readLine(request.reader); err != nil {
 		if err != nil {
 			return nil, err
 		}
@@ -45,7 +51,7 @@ func CreateRequest(reader *bufio.Reader) (*Request, error) {
 	request.Header = make(map[string]string)
 	//组装header
 	for {
-		line, err := readLine(reader)
+		line, err := readLine(request.reader)
 		if err != nil {
 			return nil, err
 		} else if len(line) == 0 {
@@ -60,7 +66,7 @@ func CreateRequest(reader *bufio.Reader) (*Request, error) {
 	return &request, nil
 }
 
-func (request *Request) Connect(conn net.Conn) {
+func (request *Request) Connect() {
 	//隧道请求
 	host := fmt.Sprintf("%s:%s", request.URL.Scheme, request.URL.Opaque)
 	socket, err := net.Dial("tcp", host)
@@ -68,12 +74,12 @@ func (request *Request) Connect(conn net.Conn) {
 		fmt.Printf("服务器无法连接:%s%s", host, NewLine)
 		return
 	}
-	conn.Write([]byte(fmt.Sprintf("HTTP/1.1 200 Connection Established%s%s", NewLine, NewLine)))
-	go io.Copy(socket, conn)
-	io.Copy(conn, socket)
+	request.conn.Write([]byte(fmt.Sprintf("HTTP/1.1 200 Connection Established%s%s", NewLine, NewLine)))
+	go io.Copy(socket, request.conn)
+	io.Copy(request.conn, socket)
 }
 
-func (request *Request) Proxy(conn net.Conn, reader *bufio.Reader) {
+func (request *Request) Proxy() {
 	//普通请求
 	if len(request.URL.Host) == 0 {
 		request.URL.Host = request.URL.Scheme
@@ -112,12 +118,12 @@ func (request *Request) Proxy(conn net.Conn, reader *bufio.Reader) {
 	if cl, ok := request.Header["Content-Length"]; ok {
 		//获取body长度，写入	body
 		if length, _ := strconv.Atoi(cl); length > 0 {
-			buf, _ := reader.Peek(length)
+			buf, _ := request.reader.Peek(length)
 			httpClient.Write(buf[0:length])
 		}
 	}
 
-	io.Copy(conn, httpClient)
+	io.Copy(request.conn, httpClient)
 }
 
 func readLine(r *bufio.Reader) (string, error) {

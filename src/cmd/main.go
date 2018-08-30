@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"log"
 	"net"
@@ -14,17 +13,16 @@ func proxy(conn net.Conn) {
 	}
 	defer conn.Close()
 
-	var connReader = bufio.NewReader(conn)
-	request, err := req.CreateRequest(connReader)
+	request, err := req.CreateRequest(conn)
 	if err != nil {
 		fmt.Println(err)
 		return
 	}
 
 	if request.Method == "CONNECT" {
-		request.Connect(conn)
+		request.Connect()
 	} else {
-		request.Proxy(conn, connReader)
+		request.Proxy()
 	}
 }
 
